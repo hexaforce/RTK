@@ -61,11 +61,11 @@ terraform apply
 
 ## DNS（Value-Domain, fpv.jp）
 
-TerraformはRoute53を使わず、AWS側は`nlb_dns_name`を出力するのみ。Value-Domainのコントロールパネルで、`var.relay_subdomain`（デフォルト`rtk-relay.fpv.jp`）に対して以下のCNAMEを手動で追加する。
+TerraformはRoute53を使わず、AWS側は`nlb_dns_name`を出力するのみ。Value-Domainのコントロールパネルで、`var.relay_subdomain`（デフォルト`rtk.fpv.jp`）に対して以下のCNAMEを手動で追加する。AレコードではなくCNAMEにすること（NLBのIPは固定ではなく変わり得るため）。
 
     種別:  CNAME
-    ホスト: rtk-relay
-    値:    <terraform output nlb_dns_name>
+    ホスト: rtk
+    値:    <terraform output nlb_dns_name>（末尾に "." を付ける）
 
 NLBのDNS名はサービス再作成では変わらないが、NLB自体を作り直した場合は変わるため、その際はCNAMEの再設定が必要。
 

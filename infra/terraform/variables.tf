@@ -58,8 +58,45 @@ variable "data_bucket_name" {
   default     = "fpv-japan"
 }
 
+variable "deploy_mockprovider" {
+  description = "Whether to deploy the mockprovider dummy RTK provider for end-to-end verification while no real provider is selected. Set to false (or remove the resources) once a real provider is in use."
+  type        = bool
+  default     = true
+}
+
+variable "mockprovider_image_tag" {
+  description = "Tag of the mockprovider image in ECR to deploy."
+  type        = string
+  default     = "mockprovider"
+}
+
+variable "mockprovider_container_port" {
+  description = "TCP port the mockprovider listens on."
+  type        = number
+  default     = 2201
+}
+
+variable "mockprovider_mountpoint" {
+  description = "NTRIP mountpoint the mockprovider expects the relay to request."
+  type        = string
+  default     = "TESTMOUNT"
+}
+
+variable "mockprovider_username" {
+  description = "Basic auth username the mockprovider expects from the relay."
+  type        = string
+  default     = "relay"
+}
+
+variable "mockprovider_password" {
+  description = "Basic auth password the mockprovider expects from the relay. Dummy value for POC verification only."
+  type        = string
+  default     = "relay-secret"
+  sensitive   = true
+}
+
 variable "relay_subdomain" {
   description = "Subdomain (under fpv.jp, managed at Value-Domain) that will CNAME to the relay's NLB. Not created by Terraform - see outputs.nlb_dns_name for the manual DNS step."
   type        = string
-  default     = "rtk-relay.fpv.jp"
+  default     = "rtk.fpv.jp"
 }

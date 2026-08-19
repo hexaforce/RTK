@@ -23,3 +23,8 @@ output "vehicle_credentials_table_name" {
 output "provider_credentials_secret_arn" {
   value = aws_secretsmanager_secret.provider_credentials.arn
 }
+
+output "mockprovider_service_name" {
+  description = "Set only when deploy_mockprovider = true. Use with `aws ecs list-tasks`/`describe-tasks` to find its private IP for provider_credentials."
+  value       = var.deploy_mockprovider ? aws_ecs_service.mockprovider[0].name : null
+}
