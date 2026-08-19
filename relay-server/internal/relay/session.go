@@ -10,6 +10,7 @@ package relay
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"log/slog"
@@ -36,6 +37,17 @@ func (s *Server) dialTimeout() time.Duration {
 		return s.DialTimeout
 	}
 	return 10 * time.Second
+}
+
+// dialProvider connects over plain TCP or TLS depending on
+// provider.TLS (some providers, e.g. docomo, expose a separate TLS
+// port alongside their plain one).
+func (s *Server) dialProvider(provider providerconfig.Provider) (net.Conn, error) {
+	dialer := &net.Dialer{Timeout: s.dialTimeout()}
+	if !provider.TLS {
+		return dialer.Dial("tcp", provider.Addr())
+	}
+	return tls.DialWithDialer(dialer, "tcp", provider.Addr(), &tls.Config{ServerName: provider.Host})
 }
 
 // ListenAndServe accepts connections until ctx is cancelled.
@@ -104,9 +116,9 @@ func (s *Server) handleVehicleConn(ctx context.Context, vconn net.Conn) {
 		return
 	}
 
-	pconn, err := net.DialTimeout("tcp", provider.Addr(), s.dialTimeout())
+	pconn, err := s.dialProvider(provider)
 	if err != nil {
-		s.Logger.Error("provider dial failed", "vehicle_id", vehicleID, "provider_id", vehicle.ProviderID, "provider_addr", provider.Addr(), "err", err)
+		s.Logger.Error("provider dial failed", "vehicle_id", vehicleID, "provider_id", vehicle.ProviderID, "provider_addr", provider.Addr(), "tls", provider.TLS, "err", err)
 		_ = ntrip.WriteError(vw, "502 Bad Gateway")
 		return
 	}
@@ -115,7 +127,8 @@ func (s *Server) handleVehicleConn(ctx context.Context, vconn net.Conn) {
 	pw := bufio.NewWriter(pconn)
 	pr := bufio.NewReader(pconn)
 
-	if err := ntrip.WriteRequest(pw, provider.Mountpoint, provider.Username, provider.Password); err != nil {
+	reqOpts := ntrip.RequestOptions{Version: provider.NTRIPVersion, ExtraHeaders: provider.ExtraHeaders}
+	if err := ntrip.WriteRequestWithOptions(pw, provider.Mountpoint, provider.Username, provider.Password, reqOpts); err != nil {
 		s.Logger.Error("provider request failed", "vehicle_id", vehicleID, "err", err)
 		_ = ntrip.WriteError(vw, "502 Bad Gateway")
 		return

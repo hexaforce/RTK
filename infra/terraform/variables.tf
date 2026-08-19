@@ -95,6 +95,18 @@ variable "mockprovider_password" {
   sensitive   = true
 }
 
+variable "mockprovider_required_header_key" {
+  description = "Simulates a provider requiring an extra connection parameter beyond mountpoint/username/password (e.g. an account ID header). Empty disables the check."
+  type        = string
+  default     = "X-Provider-Account"
+}
+
+variable "mockprovider_required_header_value" {
+  description = "Expected value for mockprovider_required_header_key. Must match the extra_headers entry in the provider's Secrets Manager secret (see secrets.tf)."
+  type        = string
+  default     = "test-account-001"
+}
+
 variable "provider_secret_prefix" {
   description = "Secrets Manager name prefix under which one secret per RTK provider lives (name = prefix + provider_id). The relay task role is granted read access to this whole prefix, so adding a provider is just creating a new secret here - no Terraform change needed."
   type        = string

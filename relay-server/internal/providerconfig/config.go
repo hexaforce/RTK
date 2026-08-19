@@ -17,12 +17,33 @@ import (
 )
 
 // Provider holds the connection details for one upstream NTRIP Caster.
+// host/port/mountpoint/username/password are the fields every provider
+// in rtk_provider_comparison.md requires; the rest capture the
+// per-provider differences that showed up in that research (NTRIP
+// version, TLS port, GGA cadence, arbitrary extra headers) so a real
+// provider's quirks don't require a code change to onboard.
 type Provider struct {
 	Host       string `json:"host"`
 	Port       string `json:"port"`
 	Mountpoint string `json:"mountpoint"`
 	Username   string `json:"username"`
 	Password   string `json:"password"`
+
+	// NTRIPVersion is "1" or "2". Empty defaults to "2". docomo, for
+	// example, exposes both a plain (2101) and TLS (2102) port; other
+	// providers only document one NTRIP version.
+	NTRIPVersion string `json:"ntrip_version,omitempty"`
+	// TLS dials the provider over TLS instead of plain TCP.
+	TLS bool `json:"tls,omitempty"`
+	// GGAIntervalSeconds is the provider's recommended/required GGA
+	// send interval (e.g. ichimill recommends 1s). Advisory only - the
+	// relay doesn't enforce it since it passes GGA through verbatim.
+	GGAIntervalSeconds int `json:"gga_interval_seconds,omitempty"`
+	// ExtraHeaders are sent verbatim on the NTRIP request to the
+	// provider, for whatever provider-specific parameter isn't covered
+	// above (e.g. an account/contract ID header some providers require
+	// in addition to the NTRIP username/password).
+	ExtraHeaders map[string]string `json:"extra_headers,omitempty"`
 }
 
 func (p Provider) Addr() string {

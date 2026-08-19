@@ -43,8 +43,8 @@ flowchart LR
 同じECRリポジトリ（`rtk-relay`）から、タグ違いのイメージを2つのECSサービスとしてそれぞれ動かしている。`relay`はNLB経由でインターネットから`rtk.fpv.jp:2101`で到達可能だが、`mockprovider`は`relay_task`のセキュリティグループからしか到達できず、インターネットには非公開。
 
 > `mockprovider`タスクを再作成するとVPC内プライベートIPが変わる（Fargateの仕様上、固定できない）。Secrets
-> Managerの`provider_credentials`に古いIPを設定したままだと`relay`が`no route to host`で502を返すので、`mockprovider`を再デプロイしたら[アドレスを取り直してSecretsを更新](#awsへのデプロイ)する必要がある（恒久対応するならService
-> Discoveryの導入を検討）。
+> Managerの`rtk-relay/providers/mock`に古いIPを設定したままだと`relay`が`no route to host`で502を返すので、`mockprovider`を再デプロイしたら[アドレスを取り直してSecretsを更新](#awsへのデプロイ)する必要がある（恒久対応するならService
+> Discoveryの導入を検討）。`relay`はSecretsを都度引くので、この更新に`relay`の再デプロイは不要。
 
 したがって、AWS上の動作を確認したいだけなら、ローカルでは何も起動せず以下を実行するだけでよい（`vehicle-001`はDynamoDBに登録済みのテスト車両、[AWSへのデプロイ](#awsへのデプロイ)参照）。
 
@@ -77,16 +77,17 @@ flowchart LR
     PROVIDER -->|"RTCM"| RELAY
 
     AUTH -.->|"ローカル: VEHICLE_API_KEYS"| STATIC["静的マップ<br/>(メモリ内)"]
-    AUTH -.->|"AWS: VEHICLE_TABLE_NAME"| DDB["DynamoDB<br/>vehicle_credentials"]
-    CONF -.->|"ローカル: PROVIDER_HOST等"| ENV["環境変数"]
-    CONF -.->|"AWS: PROVIDER_SECRET_ARN"| SECRETS["Secrets Manager<br/>provider_credentials"]
+    AUTH -.->|"AWS: VEHICLE_TABLE_NAME"| DDB["DynamoDB<br/>vehicle_credentials<br/>(vehicle_id → provider_id)"]
+    CONF -.->|"ローカル: PROVIDER_HOST等<br/>(常に1プロバイダー固定)"| ENV["環境変数"]
+    CONF -.->|"AWS: PROVIDER_SECRET_PREFIX<br/>+ vehicleのprovider_id"| SECRETS["Secrets Manager<br/>rtk-relay/providers/&lt;provider_id&gt;<br/>(プロバイダーごとに1シークレット)"]
 
     RELAY -->|"ログ (JSON, stdout)"| LOGS["CloudWatch Logs<br/>(AWS実行時、awslogsドライバ経由)"]
 ```
 
--   `VEHICLE_TABLE_NAME`/`PROVIDER_SECRET_ARN`が未設定ならローカル用の実装（静的マップ／環境変数）にフォールバックする（[internal/auth/vehicle.go](internal/auth/vehicle.go)、[internal/providerconfig/config.go](internal/providerconfig/config.go)）
--   RTCM/GGAの中身はrelayが解釈せずそのまま中継する（[internal/relay/session.go](internal/relay/session.go)）ため、DynamoDB/Secrets
-    Managerへのアクセスはセッション確立時の1回のみ
+-   `VEHICLE_TABLE_NAME`/`PROVIDER_SECRET_PREFIX`が未設定ならローカル用の実装（静的マップ／環境変数、常に1プロバイダーのみ）にフォールバックする（[internal/auth/vehicle.go](internal/auth/vehicle.go)、[internal/providerconfig/config.go](internal/providerconfig/config.go)）
+-   RTCM/GGAの中身はrelayが解釈せずそのまま中継する（[internal/relay/session.go](internal/relay/session.go)）
+-   AWSモードでは、車両ごとにDynamoDBの`provider_id`からプロバイダーを解決する（**セッションを張るたびに**Secrets Managerを引く。起動時に1回だけ読む方式ではない）ため、プロバイダーの追加・変更に中継サーバの再デプロイは不要（車両の`provider_id`を更新し、対応するシークレットを作る/更新するだけでよい）
+-   プロバイダー設定はhost/port/mountpoint/ID/PWだけでなく、NTRIPバージョンや追加ヘッダーなど各社固有のパラメータも保持できる（詳細は[rtk_relay_protocol_design.md](../rtk_relay_protocol_design.md)の「プロバイダー設定スキーマ」）
 
 ## コマンド
 
@@ -107,13 +108,13 @@ docker compose run --rm vehiclesim
 
 ## 設定（環境変数）
 
-  変数                    説明
-  ----------------------- --------------------------------------------------------------------
-  `LISTEN_ADDR`           relayの待受アドレス（例: `:2101`）
-  `PROVIDER_SECRET_ARN`   設定時、Secrets Managerからプロバイダー設定(JSON)を取得する（本番/AWS向け）
-  `PROVIDER_HOST/PORT/MOUNTPOINT/USERNAME/PASSWORD`   `PROVIDER_SECRET_ARN`未設定時、これらの環境変数から直接読む（ローカル向け）
-  `VEHICLE_TABLE_NAME`    設定時、DynamoDBで車両認証を行う（本番/AWS向け）
-  `VEHICLE_API_KEYS`      `VEHICLE_TABLE_NAME`未設定時、`vehicleID:apiKey,...`形式で直接指定（ローカル向け）
+  変数                      説明
+  ------------------------- --------------------------------------------------------------------
+  `LISTEN_ADDR`             relayの待受アドレス（例: `:2101`）
+  `PROVIDER_SECRET_PREFIX`  設定時、車両ごとの`provider_id`から`<prefix><provider_id>`という名前のSecrets Managerシークレットを都度解決する（本番/AWS向け）
+  `PROVIDER_HOST/PORT/MOUNTPOINT/USERNAME/PASSWORD`   `PROVIDER_SECRET_PREFIX`未設定時、これらの環境変数から直接読む（ローカル向け、常に1プロバイダー固定・`provider_id`は無視される）
+  `VEHICLE_TABLE_NAME`      設定時、DynamoDBで車両認証を行う（本番/AWS向け）。各アイテムは`api_key_hash`に加えて`provider_id`が必須
+  `VEHICLE_API_KEYS`        `VEHICLE_TABLE_NAME`未設定時、`vehicleID:apiKey:providerID,...`形式で直接指定（ローカル向け。`providerID`は`PROVIDER_HOST`等のローカル固定プロバイダーでは実際には使われない）
 
 ## AWSへのデプロイ
 
@@ -132,28 +133,36 @@ aws ecs update-service --cluster rtk-relay-poc --service rtk-relay-poc \
   --force-new-deployment --profile fpv-japan --region ap-northeast-1
 ```
 
-車両認証情報の登録例（`api_key_hash`はAPIキーのSHA-256 hex）：
+車両認証情報の登録例（`api_key_hash`はAPIキーのSHA-256 hex、`provider_id`はどのプロバイダーへ中継するかの割り当て）：
 
 ``` bash
 printf "<api-key>" | shasum -a 256 | awk '{print $1}'
 
 aws dynamodb put-item \
   --table-name rtk-relay-vehicle-credentials-poc \
-  --item '{"vehicle_id": {"S": "vehicle-001"}, "api_key_hash": {"S": "<hash>"}}' \
+  --item '{"vehicle_id": {"S": "vehicle-001"}, "api_key_hash": {"S": "<hash>"}, "provider_id": {"S": "<provider_id>"}}' \
   --profile fpv-japan --region ap-northeast-1
 ```
 
-プロバイダー選定後、認証情報は以下でSecrets Managerへ投入する（Terraformはシークレットの値を管理しない）。
+プロバイダーの追加・更新は、`<provider_id>`ごとに1つのSecrets Managerシークレットを作るだけでよい（Terraformの変更・中継サーバの再デプロイは不要。フィールドの意味は[rtk_relay_protocol_design.md](../rtk_relay_protocol_design.md)の「プロバイダー設定スキーマ」参照）。
 
 ``` bash
-aws secretsmanager put-secret-value --secret-id <provider_credentials_secret_arn from terraform output> \
+# 新規プロバイダー
+aws secretsmanager create-secret --name "rtk-relay/providers/<provider_id>" \
+  --secret-string '{"host":"...","port":"2101","mountpoint":"...","username":"...","password":"...","ntrip_version":"2","extra_headers":{"X-Provider-Account":"..."}}' \
+  --profile fpv-japan --region ap-northeast-1
+
+# 既存プロバイダーの更新
+aws secretsmanager put-secret-value --secret-id "rtk-relay/providers/<provider_id>" \
   --secret-string '{"host":"...","port":"2101","mountpoint":"...","username":"...","password":"..."}' \
   --profile fpv-japan --region ap-northeast-1
 ```
 
+`relay`はセッション確立のたびにSecrets Managerを引くため、上記の更新だけで即座に反映される（`relay`自体の再デプロイは不要）。
+
 ### mockprovider再デプロイ後のアドレス更新
 
-`mockprovider`を再デプロイ（`force-new-deployment`等）するとVPC内プライベートIPが変わるため、`relay`が参照しているSecretsの値を更新しないと`502 Bad Gateway`になる（[AWS上のコンテナ構成](#aws上のコンテナ構成)参照）。
+`mockprovider`を再デプロイ（`force-new-deployment`等）するとVPC内プライベートIPが変わるため、`rtk-relay/providers/mock`の値を更新しないと`502 Bad Gateway`になる（[AWS上のコンテナ構成](#aws上のコンテナ構成)参照）。
 
 ``` bash
 TASK_ARN=$(aws ecs list-tasks --cluster rtk-relay-poc --service-name rtk-relay-mockprovider-poc \
@@ -162,12 +171,9 @@ PRIVATE_IP=$(aws ecs describe-tasks --cluster rtk-relay-poc --tasks "$TASK_ARN" 
   --profile fpv-japan --region ap-northeast-1 \
   --query 'tasks[0].attachments[0].details[?name==`privateIPv4Address`].value' --output text)
 
-aws secretsmanager put-secret-value --secret-id <provider_credentials_secret_arn from terraform output> \
-  --secret-string "{\"host\":\"$PRIVATE_IP\",\"port\":\"2201\",\"mountpoint\":\"TESTMOUNT\",\"username\":\"relay\",\"password\":\"relay-secret\"}" \
+aws secretsmanager put-secret-value --secret-id "rtk-relay/providers/mock" \
+  --secret-string "{\"host\":\"$PRIVATE_IP\",\"port\":\"2201\",\"mountpoint\":\"TESTMOUNT\",\"username\":\"relay\",\"password\":\"relay-secret\",\"ntrip_version\":\"2\",\"extra_headers\":{\"X-Provider-Account\":\"test-account-001\"}}" \
   --profile fpv-japan --region ap-northeast-1
-
-aws ecs update-service --cluster rtk-relay-poc --service rtk-relay-poc \
-  --force-new-deployment --profile fpv-japan --region ap-northeast-1
 ```
 
-（`relay`はSecretsを起動時にしか読まないため、最後の`update-service`で`relay`自体も再デプロイして反映させる）
+（`X-Provider-Account`の値は`mockprovider`側の`MOCK_PROVIDER_REQUIRE_HEADER_VALUE`と一致させる必要がある。`relay`はSecretsを都度引くため、`relay`自体の再デプロイは不要）

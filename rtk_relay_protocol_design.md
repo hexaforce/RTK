@@ -88,13 +88,32 @@ Client実装（車載側）がBasic認証に標準対応しており、車載チ
 
 ### プロバイダー側認証（中継サーバからプロバイダーへの接続）
 
--   プロバイダーのMountpoint / ID / PasswordはSecrets
-    Managerに格納し、中継サーバのProvider
-    Adapterが起動時・接続確立時に取得する
--   契約形態が「車両1台=1アカウント」の場合、**車両ID ⇔
-    プロバイダーアカウント（Mountpoint/ID）のマッピングテーブル**をDynamoDBで管理する必要がある（プロバイダー選定後、契約単位が判明次第、詳細化）
--   将来的なプロバイダー切替は、Provider
-    Adapterの実装追加＋マッピングテーブルの向き先変更のみで完結させ、車両側・車両認証まわりには影響を与えない設計とする
+-   **`provider_id`の単位に注意**：多くのRTKプロバイダーは「1アカウント=同時接続1台まで」という契約になっている（[rtk_provider_comparison.md](./rtk_provider_comparison.md)の「車両台数が多い場合のコスト構造」参照。例外はKDDIのPPP-RTKメニューのみ）。したがって`provider_id`は「プロバイダー会社名」（`docomo`）ではなく「**個別の契約アカウント**」（`docomo-vehicle-001`）を指す単位で運用する。台数課金型プロバイダー以外では、車両1台につきプロバイダー契約1件・Secrets Managerシークレット1件が対応することになる
+-   **車両 ⇔ プロバイダーのマッピング**：DynamoDBの車両認証テーブル（`vehicle_credentials`）の各アイテムに`provider_id`属性を持たせる。新規テーブルは不要（実装済み、`internal/auth`）
+-   **プロバイダー接続情報**：プロバイダーIDごとに1つのSecrets
+    Managerシークレット（`rtk-relay/providers/<provider_id>`）として格納する。中継サーバのIAMロールは、このプレフィックス配下への`GetSecretValue`のみをワイルドカードで許可されている。**新しいプロバイダーの追加はシークレットを1個作るだけで完結し、Terraformの変更もコードの変更も不要**（実装済み、`internal/providerconfig.SecretsManagerResolver`）
+-   接続確立のたびに、認証成功した車両の`provider_id`をもとにこの仕組みで都度プロバイダー設定を解決する（起動時に1回だけ読み込む方式ではない）ため、プロバイダー追加・切替に再デプロイが不要
+
+#### プロバイダー設定スキーマ
+
+各社RTKプロバイダーはID/Passwordだけでなく、[rtk_provider_comparison.md](./rtk_provider_comparison.md)の調査で分かった通り、NTRIPバージョンや暗号化ポートの有無など接続時の付随パラメータが異なる。これを吸収するため、プロバイダー設定（Secrets
+Managerの値）は以下のJSONスキーマとする（`internal/providerconfig.Provider`）。
+
+``` json
+{
+  "host": "string (必須)",
+  "port": "string (必須)",
+  "mountpoint": "string (必須)",
+  "username": "string (必須)",
+  "password": "string (必須)",
+  "ntrip_version": "\"1\" | \"2\" (省略時 \"2\")",
+  "tls": "bool (省略時 false。docomoの2102ポートのようなTLS提供プロバイダー向け)",
+  "gga_interval_seconds": "number (省略可。プロバイダー推奨のGGA送信間隔、参考値)",
+  "extra_headers": "object (省略可。上記で表現しきれない任意のNTRIPリクエストヘッダー。例: アカウント/契約IDをヘッダーで要求するプロバイダー向け)"
+}
+```
+
+`host`/`port`/`mountpoint`/`username`/`password`は調査した全社が共通して必要とする最小集合。それ以外はプロバイダーごとに有無が分かれるため、`extra_headers`を汎用の逃げ道として用意し、未知のプロバイダー要件にもコード変更なしで対応できるようにしてある。
 
 ------------------------------------------------------------------------
 

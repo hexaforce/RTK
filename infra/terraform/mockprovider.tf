@@ -53,6 +53,8 @@ resource "aws_ecs_task_definition" "mockprovider" {
         { name = "MOCK_PROVIDER_MOUNTPOINT", value = var.mockprovider_mountpoint },
         { name = "MOCK_PROVIDER_USERNAME", value = var.mockprovider_username },
         { name = "MOCK_PROVIDER_PASSWORD", value = var.mockprovider_password },
+        { name = "MOCK_PROVIDER_REQUIRE_HEADER_KEY", value = var.mockprovider_required_header_key },
+        { name = "MOCK_PROVIDER_REQUIRE_HEADER_VALUE", value = var.mockprovider_required_header_value },
       ]
       logConfiguration = {
         logDriver = "awslogs"

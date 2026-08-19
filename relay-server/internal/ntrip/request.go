@@ -71,22 +71,46 @@ func ReadRequest(r *bufio.Reader) (*Request, error) {
 	return &Request{Mountpoint: mountpoint, Headers: headers}, nil
 }
 
-// WriteRequest writes an NTRIP v1-style GET request for connecting to an
+// WriteRequest writes an NTRIP v2 GET request for connecting to an
 // upstream Caster (used when the relay itself acts as an NTRIP client
-// toward the RTK provider).
+// toward the RTK provider, or vehiclesim toward the relay).
 func WriteRequest(w *bufio.Writer, mountpoint, username, password string) error {
+	return WriteRequestWithOptions(w, mountpoint, username, password, RequestOptions{})
+}
+
+// RequestOptions carries the provider-specific NTRIP request details
+// that go beyond mountpoint/username/password - real RTK providers vary
+// in NTRIP version and sometimes require extra headers
+// (see rtk_provider_comparison.md and providerconfig.Provider).
+type RequestOptions struct {
+	// Version is "1" or "2"; empty defaults to "2". NTRIP v1 Casters
+	// don't expect (and may reject) the Ntrip-Version header.
+	Version string
+	// ExtraHeaders are sent verbatim after the standard headers, for
+	// whatever provider-specific parameter a given provider requires
+	// (e.g. an account/contract ID header).
+	ExtraHeaders map[string]string
+}
+
+// WriteRequestWithOptions is WriteRequest with provider-specific
+// options applied.
+func WriteRequestWithOptions(w *bufio.Writer, mountpoint, username, password string, opts RequestOptions) error {
 	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	req := fmt.Sprintf(
-		"GET /%s HTTP/1.1\r\n"+
-			"Host: ntrip-relay\r\n"+
-			"Ntrip-Version: Ntrip/2.0\r\n"+
-			"User-Agent: NTRIP fpv-japan-relay/0.1\r\n"+
-			"Authorization: Basic %s\r\n"+
-			"Connection: close\r\n"+
-			"\r\n",
-		mountpoint, auth,
-	)
-	if _, err := w.WriteString(req); err != nil {
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "GET /%s HTTP/1.1\r\n", mountpoint)
+	b.WriteString("Host: ntrip-relay\r\n")
+	if opts.Version != "1" {
+		b.WriteString("Ntrip-Version: Ntrip/2.0\r\n")
+	}
+	b.WriteString("User-Agent: NTRIP fpv-japan-relay/0.1\r\n")
+	fmt.Fprintf(&b, "Authorization: Basic %s\r\n", auth)
+	for k, v := range opts.ExtraHeaders {
+		fmt.Fprintf(&b, "%s: %s\r\n", k, v)
+	}
+	b.WriteString("Connection: close\r\n\r\n")
+
+	if _, err := w.WriteString(b.String()); err != nil {
 		return err
 	}
 	return w.Flush()

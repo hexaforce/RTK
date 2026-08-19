@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,6 +29,12 @@ func main() {
 	mountpoint := envOr("MOCK_PROVIDER_MOUNTPOINT", "TESTMOUNT")
 	username := envOr("MOCK_PROVIDER_USERNAME", "relay")
 	password := envOr("MOCK_PROVIDER_PASSWORD", "relay-secret")
+	// Simulates a provider that requires an extra connection parameter
+	// beyond mountpoint/username/password (e.g. an account ID header),
+	// to exercise providerconfig.Provider.ExtraHeaders end-to-end.
+	// Unset (the default) means no extra header is required.
+	requiredHeaderKey := envOr("MOCK_PROVIDER_REQUIRE_HEADER_KEY", "")
+	requiredHeaderValue := envOr("MOCK_PROVIDER_REQUIRE_HEADER_VALUE", "")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -53,11 +60,11 @@ func main() {
 			logger.Error("accept failed", "err", err)
 			continue
 		}
-		go handleConn(ctx, conn, logger, mountpoint, username, password)
+		go handleConn(ctx, conn, logger, mountpoint, username, password, requiredHeaderKey, requiredHeaderValue)
 	}
 }
 
-func handleConn(ctx context.Context, conn net.Conn, logger *slog.Logger, mountpoint, username, password string) {
+func handleConn(ctx context.Context, conn net.Conn, logger *slog.Logger, mountpoint, username, password, requiredHeaderKey, requiredHeaderValue string) {
 	defer conn.Close()
 	r := bufio.NewReader(conn)
 	w := bufio.NewWriter(conn)
@@ -67,6 +74,8 @@ func handleConn(ctx context.Context, conn net.Conn, logger *slog.Logger, mountpo
 		logger.Warn("bad request", "err", err)
 		return
 	}
+	logger.Info("request headers", "headers", req.Headers)
+
 	if req.Mountpoint != mountpoint {
 		logger.Warn("unknown mountpoint requested", "mountpoint", req.Mountpoint)
 		_ = ntrip.WriteError(w, "404 Not Found")
@@ -77,6 +86,14 @@ func handleConn(ctx context.Context, conn net.Conn, logger *slog.Logger, mountpo
 		logger.Warn("auth rejected", "user", user)
 		_ = ntrip.WriteError(w, "401 Unauthorized")
 		return
+	}
+	if requiredHeaderKey != "" {
+		got, present := req.Headers[strings.ToLower(requiredHeaderKey)]
+		if !present || got != requiredHeaderValue {
+			logger.Warn("missing/mismatched required header", "key", requiredHeaderKey, "got", got, "present", present)
+			_ = ntrip.WriteError(w, "400 Bad Request")
+			return
+		}
 	}
 	if err := ntrip.WriteOK(w); err != nil {
 		return
