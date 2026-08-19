@@ -143,8 +143,9 @@ RELAY_ADDR=rtk.fpv.jp:2101 VEHICLE_ID=vehicle-001 VEHICLE_API_KEY=dev-key-001 MO
   go run ./cmd/vehiclesim
 ```
 
-`session established with relay`のあと`received RTCM bytes`が継続的に出れば、AWS上のrelay/mockprovider共々正常に動作している。
+`session established with relay`のあと`received RTCM bytes`が継続的に出れば、AWS上のrelay/mockprovider共々正常に動作している。  
 
+![alt text](../vehiclesim.png)
 ## 設定（環境変数）
 
 | 変数 | 説明 |
