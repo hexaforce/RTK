@@ -3,18 +3,19 @@
 [RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)
 の実装。車両からのNTRIPセッションを受け、DynamoDBで認証した上でRTKプロバイダーへ中継する。
 
-## 今どこで何が動いているか
+## 概要
 
-| プログラム | 役割 | 今の実体 | ローカルで起動する必要があるのは |
-|---|---|---|---|
-| `cmd/relay` | 車両からはサーバ役／プロバイダーへはクライアント役（二重ロール） | AWS ECS（`rtk-relay-poc`）で**常時稼働中** | コードを変更し、AWSへ再デプロイする前に手元で動作確認したいとき |
-| `cmd/mockprovider` | サーバ役（`net.Listen`で待ち受けるだけ）＝RTKプロバイダーの代役 | AWS ECS（`rtk-relay-mockprovider-poc`）で**常時稼働中**（プロバイダー未選定のための暫定。[RTKプロバイダー比較検討資料（Draft）.md](../RTKプロバイダー比較検討資料（Draft）.md)で決まったら`infra/terraform`の`deploy_mockprovider = false`で撤去する） | AWSに繋がずオフラインで素早く検証したいとき |
-| `cmd/vehiclesim` | クライアント役（自分から`net.Dial`で接続しにいく）＝車両の代役 | **常時稼働のサービスとしてはどこにもデプロイしていない**。手元やCIなど好きな場所で都度実行する検証ツール | 動作確認したいとき全般（`RELAY_ADDR`でローカル/AWSどちらのrelayにも向けられる） |
+3つのプログラムで構成される。
 
-**重要**：ローカルの`relay`/`mockprovider`を起動するかどうかは、AWS上で常時動いている`rtk-relay-poc`/`rtk-relay-mockprovider-poc`には一切影響しない。両者は同じコードから作られた別々のデプロイ先（自分のマシン上のプロセス
+| プログラム | 役割 | 備考 |
+|---|---|---|
+| `cmd/relay` | 中継サーバ本体。車両からはNTRIP Caster、プロバイダーへはNTRIP Clientとして振る舞う（二重ロール） | 本プロジェクトではAWS ECS（`rtk-relay-poc`）上で常時稼働させる |
+| `cmd/mockprovider` | RTKプロバイダーがまだ未選定のための代役 | ローカルでもAWS（`rtk-relay-mockprovider-poc`）でも動かせる。[RTKプロバイダー比較検討資料（Draft）.md](../RTKプロバイダー比較検討資料（Draft）.md)でプロバイダーが決まったら`infra/terraform`の`deploy_mockprovider = false`で撤去する |
+| `cmd/vehiclesim` | 車両側NTRIP Clientの代役 | 常時稼働のサービスとしてはデプロイせず、手元やCIから都度実行する検証ツール。`RELAY_ADDR`でローカル/AWSどちらのrelayにも向けられる |
+
+ローカルで`relay`/`mockprovider`を起動するかどうかは、AWS上の実体には影響しない。両者は同じコードから作られた別々のデプロイ先（自分のマシン上のプロセス
 vs
-ECS上のFargateタスク）であり、独立して動いている。どちらと通信するかは`vehiclesim`（や実車のNTRIP
-Client）が接続する`RELAY_ADDR`が`localhost:2101`か`rtk.fpv.jp:2101`かで決まる。
+ECS上のFargateタスク）として独立に動いており、`vehiclesim`がどちらと通信するかは接続先の`RELAY_ADDR`（`localhost:2101`か`rtk.fpv.jp:2101`か）で決まる。
 
 ### AWS上のコンテナ構成
 
@@ -33,28 +34,22 @@ flowchart LR
     end
 
     ECR["ECR: rtk-relay<br/>タグ latest(relay) /<br/>mockprovider"]
+    REALPROVIDER["実RTKプロバイダー<br/>(インターネット上、社外)<br/>例: ドコモ/KDDI/ソフトバンク等"]
 
     VEHICLESIM -->|"rtk.fpv.jp:2101<br/>(NLB経由)"| RELAYC
-    RELAYC -->|"VPC内プライベートIP:2201<br/>(relay_task SGのみ許可)"| MOCKC
+    RELAYC -->|"provider_id = mock<br/>VPC内プライベートIP:2201<br/>(relay_task SGのみ許可)"| MOCKC
+    RELAYC -->|"provider_id = 実アカウントID<br/>インターネット経由(NAT/IGW)<br/>host/port/mountpointはSecrets Managerで指定"| REALPROVIDER
     ECR -.->|"docker pull"| RELAYC
     ECR -.->|"docker pull"| MOCKC
 ```
 
 同じECRリポジトリ（`rtk-relay`）から、タグ違いのイメージを2つのECSサービスとしてそれぞれ動かしている。`relay`はNLB経由でインターネットから`rtk.fpv.jp:2101`で到達可能だが、`mockprovider`は`relay_task`のセキュリティグループからしか到達できず、インターネットには非公開。
 
+`relay`が実際にどちらへ中継するかは、接続してきた車両の`provider_id`（DynamoDB）で決まる（[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」参照）。`mock`ならこのVPC内の`mockprovider`へ、実プロバイダーのアカウントIDならSecrets Managerに登録したhost/port/mountpointをもとにインターネット経由で実プロバイダーへ接続する。`relay_task`は`assign_public_ip = true`でデフォルトVPCの各サブネットに配置されているため、インターネットへの直接アウトバウンド通信が可能（[infra/terraform/README.md](../infra/terraform/README.md)参照）。
+
 > `mockprovider`タスクを再作成するとVPC内プライベートIPが変わる（Fargateの仕様上、固定できない）。Secrets
 > Managerの`rtk-relay/providers/mock`に古いIPを設定したままだと`relay`が`no route to host`で502を返すので、`mockprovider`を再デプロイしたら[アドレスを取り直してSecretsを更新](#awsへのデプロイ)する必要がある（恒久対応するならService
 > Discoveryの導入を検討）。`relay`はSecretsを都度引くので、この更新に`relay`の再デプロイは不要。
-
-したがって、AWS上の動作を確認したいだけなら、ローカルでは何も起動せず以下を実行するだけでよい（`vehicle-001`はDynamoDBに登録済みのテスト車両、[AWSへのデプロイ](#awsへのデプロイ)参照）。
-
-``` bash
-cd relay-server
-RELAY_ADDR=rtk.fpv.jp:2101 VEHICLE_ID=vehicle-001 VEHICLE_API_KEY=dev-key-001 MOUNTPOINT=RELAY \
-  go run ./cmd/vehiclesim
-```
-
-`session established with relay`のあと`received RTCM bytes`が継続的に出れば、AWS上のrelay/mockprovider共々正常に動作している。
 
 ## AWSリソースとの関わり
 
@@ -89,15 +84,47 @@ flowchart LR
 -   AWSモードでは、車両ごとにDynamoDBの`provider_id`からプロバイダーを解決する（**セッションを張るたびに**Secrets Managerを引く。起動時に1回だけ読む方式ではない）ため、プロバイダーの追加・変更に中継サーバの再デプロイは不要（車両の`provider_id`を更新し、対応するシークレットを作る/更新するだけでよい）
 -   プロバイダー設定はhost/port/mountpoint/ID/PWだけでなく、NTRIPバージョンや追加ヘッダーなど各社固有のパラメータも保持できる（詳細は[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」）
 
-## コマンド
+## DynamoDBとSecrets Manager
 
--   `cmd/relay` — 本体。車両向けNTRIP Caster兼プロバイダー向けNTRIP Client
--   `cmd/mockprovider` — RTKプロバイダー未選定のためのダミープロバイダー（ローカル・AWS両方で動かせる）
--   `cmd/vehiclesim` — 車両シミュレータ（GGA送信・RTCM受信をログ出力）。常時稼働のサービスではなく、検証したいときに都度実行するツール
+車両側の認証情報とプロバイダー側の接続情報は、それぞれ別のAWSリソースで管理する（役割が異なるため：前者は「誰が接続してよいか」、後者は「どこに繋ぐか」）。
 
-それぞれが「今どこで動いているか」は[今どこで何が動いているか](#今どこで何が動いているか)を参照。
+### DynamoDB（`vehicle_credentials`テーブル）
 
-## ローカルでの動作確認
+車両1台につき1アイテム。属性は3つだけ。
+![alt text](../DynamoDB.png)
+| 属性 | 説明 |
+|---|---|
+| `vehicle_id`（パーティションキー） | 車両を一意に識別するID |
+| `api_key_hash` | 車両がNTRIP Basic認証で提示するAPIキーのSHA-256 hex（平文は保存しない） |
+| `provider_id` | この車両が使うプロバイダーのアカウントを指す値。Secrets Managerの`rtk-relay/providers/<provider_id>`に対応する |
+
+新規テーブルを増やすのではなく、この`provider_id`属性だけで「どの車両がどのプロバイダーアカウントを使うか」を表現している（実装は[internal/auth/vehicle.go](internal/auth/vehicle.go)）。
+
+### Secrets Manager（`rtk-relay/providers/<provider_id>`）
+
+**1アカウント = 1シークレット**が原則。多くのRTKプロバイダーは「1アカウント=同時接続1台まで」という契約になっているため（[RTKプロバイダー比較検討資料（Draft）.md](../RTKプロバイダー比較検討資料（Draft）.md)の「車両台数が多い場合のコスト構造」参照）、`provider_id`は会社名（`docomo`）ではなくアカウント単位（`docomo-vehicle-001`）で割り当て、車両が増えればシークレットも同じ数だけ増えていく想定。
+![alt text](<../Secrets Manager.png>)
+シークレットの値は以下のJSON（詳細は[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」）。
+
+``` json
+{
+  "host": "string (必須)",
+  "port": "string (必須)",
+  "mountpoint": "string (必須)",
+  "username": "string (必須)",
+  "password": "string (必須)",
+  "ntrip_version": "\"1\" | \"2\" (省略時 \"2\")",
+  "tls": "bool (省略時 false)",
+  "gga_interval_seconds": "number (省略可)",
+  "extra_headers": "object (省略可)"
+}
+```
+
+`relay`のIAMタスクロールは`rtk-relay/providers/`プレフィックス配下への`GetSecretValue`をワイルドカードで許可されているため、新しいアカウントの追加はシークレットを1個作るだけで完結し、Terraformの変更も`relay`の再デプロイも不要（[infra/terraform/README.md](../infra/terraform/README.md)参照）。
+
+## 動作確認
+
+### ローカル
 
 ``` bash
 docker compose up -d mockprovider relay
@@ -105,6 +132,18 @@ docker compose run --rm vehiclesim
 ```
 
 `vehiclesim`のログに`received RTCM bytes`が継続的に出れば、GGA/RTCM双方向の中継が正常に動作している。
+
+### AWS
+
+ローカルでは何も起動せず、AWS上の`relay`/`mockprovider`に対して直接`vehiclesim`を実行できる（`vehicle-001`はDynamoDBに登録済みのテスト車両、[AWSへのデプロイ](#awsへのデプロイ)参照）。
+
+``` bash
+cd relay-server
+RELAY_ADDR=rtk.fpv.jp:2101 VEHICLE_ID=vehicle-001 VEHICLE_API_KEY=dev-key-001 MOUNTPOINT=RELAY \
+  go run ./cmd/vehiclesim
+```
+
+`session established with relay`のあと`received RTCM bytes`が継続的に出れば、AWS上のrelay/mockprovider共々正常に動作している。
 
 ## 設定（環境変数）
 
