@@ -3,6 +3,38 @@
 [rtk_relay_protocol_design.md](../rtk_relay_protocol_design.md)
 の実装。車両からのNTRIPセッションを受け、DynamoDBで認証した上でRTKプロバイダーへ中継する。
 
+## AWSリソースとの関わり
+
+`relay`プロセス自体はステートレスで、認証情報とプロバイダー設定は外部から注入される（ローカル実行は環境変数、AWS実行はDynamoDB/Secrets
+Manager）。インフラ全体の構成図は[infra/terraform/README.md](../infra/terraform/README.md)を参照。
+
+``` mermaid
+flowchart LR
+    VEHICLE["車両 / vehiclesim<br/>NTRIP Client"]
+    PROVIDER["RTK Provider /<br/>mockprovider"]
+
+    subgraph RELAY["relay プロセス"]
+        AUTH{{"VehicleAuthenticator"}}
+        CONF{{"Provider Config"}}
+    end
+
+    VEHICLE -->|"GGA (要Basic認証)"| RELAY
+    RELAY -->|"RTCM"| VEHICLE
+    RELAY -->|"GGA"| PROVIDER
+    PROVIDER -->|"RTCM"| RELAY
+
+    AUTH -.->|"ローカル: VEHICLE_API_KEYS"| STATIC["静的マップ<br/>(メモリ内)"]
+    AUTH -.->|"AWS: VEHICLE_TABLE_NAME"| DDB["DynamoDB<br/>vehicle_credentials"]
+    CONF -.->|"ローカル: PROVIDER_HOST等"| ENV["環境変数"]
+    CONF -.->|"AWS: PROVIDER_SECRET_ARN"| SECRETS["Secrets Manager<br/>provider_credentials"]
+
+    RELAY -->|"ログ (JSON, stdout)"| LOGS["CloudWatch Logs<br/>(AWS実行時、awslogsドライバ経由)"]
+```
+
+-   `VEHICLE_TABLE_NAME`/`PROVIDER_SECRET_ARN`が未設定ならローカル用の実装（静的マップ／環境変数）にフォールバックする（[internal/auth/vehicle.go](internal/auth/vehicle.go)、[internal/providerconfig/config.go](internal/providerconfig/config.go)）
+-   RTCM/GGAの中身はrelayが解釈せずそのまま中継する（[internal/relay/session.go](internal/relay/session.go)）ため、DynamoDB/Secrets
+    Managerへのアクセスはセッション確立時の1回のみ
+
 ## コマンド
 
 -   `cmd/relay` — 本体。車両向けNTRIP Caster兼プロバイダー向けNTRIP Client
