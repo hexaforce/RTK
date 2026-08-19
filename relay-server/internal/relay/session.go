@@ -21,14 +21,14 @@ import (
 	"github.com/fpv-japan/rtk-relay/internal/providerconfig"
 )
 
-// Server accepts vehicle NTRIP connections and relays them to a single
-// upstream provider.
+// Server accepts vehicle NTRIP connections and relays each one to the
+// upstream provider assigned to that vehicle (see internal/auth).
 type Server struct {
-	ListenAddr    string
-	Provider      providerconfig.Provider
-	Auth          auth.VehicleAuthenticator
-	DialTimeout   time.Duration
-	Logger        *slog.Logger
+	ListenAddr  string
+	Providers   providerconfig.Resolver
+	Auth        auth.VehicleAuthenticator
+	DialTimeout time.Duration
+	Logger      *slog.Logger
 }
 
 func (s *Server) dialTimeout() time.Duration {
@@ -85,21 +85,28 @@ func (s *Server) handleVehicleConn(ctx context.Context, vconn net.Conn) {
 		return
 	}
 
-	authed, err := s.Auth.Authenticate(ctx, vehicleID, apiKey)
+	vehicle, err := s.Auth.Authenticate(ctx, vehicleID, apiKey)
 	if err != nil {
 		s.Logger.Error("vehicle auth backend error", "remote", remote, "vehicle_id", vehicleID, "err", err)
 		_ = ntrip.WriteError(vw, "502 Bad Gateway")
 		return
 	}
-	if !authed {
+	if vehicle == nil {
 		s.Logger.Warn("vehicle auth rejected", "remote", remote, "vehicle_id", vehicleID)
 		_ = ntrip.WriteError(vw, "401 Unauthorized")
 		return
 	}
 
-	pconn, err := net.DialTimeout("tcp", s.Provider.Addr(), s.dialTimeout())
+	provider, err := s.Providers.Resolve(ctx, vehicle.ProviderID)
 	if err != nil {
-		s.Logger.Error("provider dial failed", "vehicle_id", vehicleID, "provider_addr", s.Provider.Addr(), "err", err)
+		s.Logger.Error("provider resolve failed", "vehicle_id", vehicleID, "provider_id", vehicle.ProviderID, "err", err)
+		_ = ntrip.WriteError(vw, "502 Bad Gateway")
+		return
+	}
+
+	pconn, err := net.DialTimeout("tcp", provider.Addr(), s.dialTimeout())
+	if err != nil {
+		s.Logger.Error("provider dial failed", "vehicle_id", vehicleID, "provider_id", vehicle.ProviderID, "provider_addr", provider.Addr(), "err", err)
 		_ = ntrip.WriteError(vw, "502 Bad Gateway")
 		return
 	}
@@ -108,7 +115,7 @@ func (s *Server) handleVehicleConn(ctx context.Context, vconn net.Conn) {
 	pw := bufio.NewWriter(pconn)
 	pr := bufio.NewReader(pconn)
 
-	if err := ntrip.WriteRequest(pw, s.Provider.Mountpoint, s.Provider.Username, s.Provider.Password); err != nil {
+	if err := ntrip.WriteRequest(pw, provider.Mountpoint, provider.Username, provider.Password); err != nil {
 		s.Logger.Error("provider request failed", "vehicle_id", vehicleID, "err", err)
 		_ = ntrip.WriteError(vw, "502 Bad Gateway")
 		return
@@ -131,7 +138,7 @@ func (s *Server) handleVehicleConn(ctx context.Context, vconn net.Conn) {
 		return
 	}
 
-	s.Logger.Info("session established", "vehicle_id", vehicleID, "remote", remote, "mountpoint", s.Provider.Mountpoint)
+	s.Logger.Info("session established", "vehicle_id", vehicleID, "remote", remote, "provider_id", vehicle.ProviderID, "mountpoint", provider.Mountpoint)
 	start := time.Now()
 	ggaBytes, rtcmBytes := s.splice(vconn, vr, pconn, pr)
 	s.Logger.Info("session closed",

@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -25,11 +24,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	provider, vehicleAuth := mustLoadDependencies(ctx, logger)
+	providers, vehicleAuth := mustLoadDependencies(ctx, logger)
 
 	srv := &relay.Server{
 		ListenAddr: listenAddr,
-		Provider:   provider,
+		Providers:  providers,
 		Auth:       vehicleAuth,
 		Logger:     logger,
 	}
@@ -40,29 +39,33 @@ func main() {
 	}
 }
 
-func mustLoadDependencies(ctx context.Context, logger *slog.Logger) (providerconfig.Provider, auth.VehicleAuthenticator) {
-	secretARN := os.Getenv("PROVIDER_SECRET_ARN")
+// mustLoadDependencies wires up the vehicle authenticator and provider
+// resolver. Each is independently AWS-backed or local-fallback:
+//   - VEHICLE_TABLE_NAME set -> DynamoDB vehicle auth (each item's
+//     provider_id says which provider that vehicle uses).
+//   - PROVIDER_SECRET_PREFIX set -> Secrets Manager provider resolver,
+//     one secret per provider named "<prefix><provider_id>". Adding a
+//     provider is then just creating a new secret, no redeploy needed.
+//   - Otherwise: local fallback (VEHICLE_API_KEYS / PROVIDER_HOST etc.)
+//     that ignores per-vehicle provider assignment - local dev only
+//     ever exercises one provider at a time.
+func mustLoadDependencies(ctx context.Context, logger *slog.Logger) (providerconfig.Resolver, auth.VehicleAuthenticator) {
+	secretPrefix := os.Getenv("PROVIDER_SECRET_PREFIX")
 	tableName := os.Getenv("VEHICLE_TABLE_NAME")
 
-	var provider providerconfig.Provider
+	var providers providerconfig.Resolver
 	var vehicleAuth auth.VehicleAuthenticator
 
-	if secretARN != "" || tableName != "" {
+	if secretPrefix != "" || tableName != "" {
 		cfg, err := config.LoadDefaultConfig(ctx, config.WithRetryMaxAttempts(3))
 		if err != nil {
 			logger.Error("failed to load AWS config", "err", err)
 			os.Exit(1)
 		}
 
-		if secretARN != "" {
+		if secretPrefix != "" {
 			smClient := secretsmanager.NewFromConfig(cfg)
-			ctx2, cancel := context.WithTimeout(ctx, 10*time.Second)
-			defer cancel()
-			provider, err = providerconfig.LoadFromSecretsManager(ctx2, smClient, secretARN)
-			if err != nil {
-				logger.Error("failed to load provider config from Secrets Manager", "err", err)
-				os.Exit(1)
-			}
+			providers = providerconfig.SecretsManagerResolver{Client: smClient, Prefix: secretPrefix}
 		}
 
 		if tableName != "" {
@@ -71,20 +74,20 @@ func mustLoadDependencies(ctx context.Context, logger *slog.Logger) (providercon
 		}
 	}
 
-	if secretARN == "" {
-		var err error
-		provider, err = providerconfig.LoadFromEnv()
+	if secretPrefix == "" {
+		provider, err := providerconfig.LoadFromEnv()
 		if err != nil {
 			logger.Error("failed to load provider config from env", "err", err)
 			os.Exit(1)
 		}
+		providers = providerconfig.StaticResolver{Provider: provider}
 	}
 
 	if tableName == "" {
 		vehicleAuth = auth.NewStaticAuthenticatorFromEnv()
 	}
 
-	return provider, vehicleAuth
+	return providers, vehicleAuth
 }
 
 func envOr(key, fallback string) string {

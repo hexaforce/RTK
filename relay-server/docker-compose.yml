@@ -24,7 +24,7 @@ services:
       PROVIDER_MOUNTPOINT: "TESTMOUNT"
       PROVIDER_USERNAME: "relay"
       PROVIDER_PASSWORD: "relay-secret"
-      VEHICLE_API_KEYS: "vehicle-001:dev-key-001"
+      VEHICLE_API_KEYS: "vehicle-001:dev-key-001:mock"
     ports:
       - "2101:2101"
     depends_on:

@@ -42,7 +42,7 @@ data "aws_iam_policy_document" "task_permissions" {
   statement {
     sid       = "ReadProviderCredentials"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.provider_credentials.arn]
+    resources = [local.provider_secrets_arn_pattern]
   }
 }
 
@@ -74,7 +74,7 @@ resource "aws_ecs_task_definition" "relay" {
       ]
       environment = [
         { name = "LISTEN_ADDR", value = ":${var.relay_container_port}" },
-        { name = "PROVIDER_SECRET_ARN", value = aws_secretsmanager_secret.provider_credentials.arn },
+        { name = "PROVIDER_SECRET_PREFIX", value = var.provider_secret_prefix },
         { name = "VEHICLE_TABLE_NAME", value = aws_dynamodb_table.vehicle_credentials.name },
       ]
       logConfiguration = {

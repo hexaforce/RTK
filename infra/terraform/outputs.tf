@@ -20,8 +20,9 @@ output "vehicle_credentials_table_name" {
   value = aws_dynamodb_table.vehicle_credentials.name
 }
 
-output "provider_credentials_secret_arn" {
-  value = aws_secretsmanager_secret.provider_credentials.arn
+output "provider_secret_prefix" {
+  description = "Create a provider's secret at this prefix + provider_id (see secrets.tf)."
+  value       = var.provider_secret_prefix
 }
 
 output "mockprovider_service_name" {

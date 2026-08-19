@@ -95,6 +95,12 @@ variable "mockprovider_password" {
   sensitive   = true
 }
 
+variable "provider_secret_prefix" {
+  description = "Secrets Manager name prefix under which one secret per RTK provider lives (name = prefix + provider_id). The relay task role is granted read access to this whole prefix, so adding a provider is just creating a new secret here - no Terraform change needed."
+  type        = string
+  default     = "rtk-relay/providers/"
+}
+
 variable "relay_subdomain" {
   description = "Subdomain (under fpv.jp, managed at Value-Domain) that will CNAME to the relay's NLB. Not created by Terraform - see outputs.nlb_dns_name for the manual DNS step."
   type        = string

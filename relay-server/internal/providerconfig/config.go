@@ -1,6 +1,10 @@
 // Package providerconfig loads the upstream RTK provider's NTRIP
 // connection details, abstracting away which provider is behind it
 // (see rtk_relay_server_requirements.md, "Provider Adapter").
+//
+// Multiple providers can be registered at once; each vehicle is
+// assigned a provider_id (see internal/auth), and the relay resolves
+// that vehicle's Provider config per session.
 package providerconfig
 
 import (
@@ -25,6 +29,24 @@ func (p Provider) Addr() string {
 	return fmt.Sprintf("%s:%s", p.Host, p.Port)
 }
 
+// Resolver returns the Provider config a given vehicle (identified by
+// its assigned provider_id) should be relayed to.
+type Resolver interface {
+	Resolve(ctx context.Context, providerID string) (Provider, error)
+}
+
+// StaticResolver always returns the same Provider regardless of
+// providerID. Used for local development where only one provider is
+// configured via env vars and per-vehicle provider assignment isn't
+// exercised.
+type StaticResolver struct {
+	Provider Provider
+}
+
+func (r StaticResolver) Resolve(_ context.Context, _ string) (Provider, error) {
+	return r.Provider, nil
+}
+
 // LoadFromEnv builds a Provider from discrete PROVIDER_* env vars.
 // Used for local development where no Secrets Manager is available.
 func LoadFromEnv() (Provider, error) {
@@ -41,24 +63,36 @@ func LoadFromEnv() (Provider, error) {
 	return p, nil
 }
 
-// LoadFromSecretsManager fetches and decodes a Provider from a Secrets
-// Manager secret (JSON matching the Provider fields).
-func LoadFromSecretsManager(ctx context.Context, client *secretsmanager.Client, secretARN string) (Provider, error) {
-	out, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: &secretARN,
+// SecretsManagerResolver resolves a provider_id to a Provider by
+// fetching the Secrets Manager secret named "<prefix><providerID>"
+// (e.g. prefix "rtk-relay/providers/" + id "docomo-poc"). Adding a new
+// provider is then just creating a new secret under that prefix - no
+// redeploy or Terraform change required.
+type SecretsManagerResolver struct {
+	Client *secretsmanager.Client
+	Prefix string
+}
+
+func (r SecretsManagerResolver) Resolve(ctx context.Context, providerID string) (Provider, error) {
+	if providerID == "" {
+		return Provider{}, fmt.Errorf("vehicle has no provider_id assigned")
+	}
+	secretName := r.Prefix + providerID
+	out, err := r.Client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: &secretName,
 	})
 	if err != nil {
-		return Provider{}, fmt.Errorf("get secret value: %w", err)
+		return Provider{}, fmt.Errorf("get secret value %s: %w", secretName, err)
 	}
 	if out.SecretString == nil {
-		return Provider{}, fmt.Errorf("secret %s has no string value", secretARN)
+		return Provider{}, fmt.Errorf("secret %s has no string value", secretName)
 	}
 	var p Provider
 	if err := json.Unmarshal([]byte(*out.SecretString), &p); err != nil {
-		return Provider{}, fmt.Errorf("decode secret json: %w", err)
+		return Provider{}, fmt.Errorf("decode secret %s json: %w", secretName, err)
 	}
 	if p.Host == "" || p.Port == "" || p.Mountpoint == "" {
-		return Provider{}, fmt.Errorf("secret %s is missing host/port/mountpoint", secretARN)
+		return Provider{}, fmt.Errorf("secret %s is missing host/port/mountpoint", secretName)
 	}
 	return p, nil
 }
