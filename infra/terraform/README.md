@@ -1,6 +1,6 @@
 # RTK中継サーバ Terraform（POC）
 
-[rtk_relay_server_requirements.md](../../rtk_relay_server_requirements.md)のAWS構成案の実装。ECR
+[RTK中継サーバ 要件定義・設計ドキュメント.md](../../RTK中継サーバ%20要件定義・設計ドキュメント.md)のAWS構成案の実装。ECR
 + ECS/Fargate + NLB(TCP) + DynamoDB + Secrets Managerを作成する。デフォルトVPCを利用し、NAT
 Gatewayコストを避けるためFargateタスクにPublic
 IPを直接割り当てている（POC構成であり、本番では専用VPC・プライベートサブネット化を検討）。

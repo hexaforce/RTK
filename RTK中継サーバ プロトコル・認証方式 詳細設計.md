@@ -1,6 +1,6 @@
 # RTK中継サーバ プロトコル・認証方式 詳細設計（Draft）
 
-[rtk_relay_server_requirements.md](./rtk_relay_server_requirements.md)
+[RTK中継サーバ 要件定義・設計ドキュメント.md](./RTK中継サーバ%20要件定義・設計ドキュメント.md)
 のF-1〜F-8を満たすための、中継サーバの通信プロトコルおよび認証方式を詳細化する。プロバイダーは本ドキュメント時点で未選定のため、Provider
 Adapterで吸収できる形で設計する。
 
@@ -88,7 +88,7 @@ Client実装（車載側）がBasic認証に標準対応しており、車載チ
 
 ### プロバイダー側認証（中継サーバからプロバイダーへの接続）
 
--   **`provider_id`の単位に注意**：多くのRTKプロバイダーは「1アカウント=同時接続1台まで」という契約になっている（[rtk_provider_comparison.md](./rtk_provider_comparison.md)の「車両台数が多い場合のコスト構造」参照。例外はKDDIのPPP-RTKメニューのみ）。したがって`provider_id`は「プロバイダー会社名」（`docomo`）ではなく「**個別の契約アカウント**」（`docomo-vehicle-001`）を指す単位で運用する。台数課金型プロバイダー以外では、車両1台につきプロバイダー契約1件・Secrets Managerシークレット1件が対応することになる
+-   **`provider_id`の単位に注意**：多くのRTKプロバイダーは「1アカウント=同時接続1台まで」という契約になっている（[RTKプロバイダー比較検討資料（Draft）.md](./RTKプロバイダー比較検討資料（Draft）.md)の「車両台数が多い場合のコスト構造」参照。例外はKDDIのPPP-RTKメニューのみ）。したがって`provider_id`は「プロバイダー会社名」（`docomo`）ではなく「**個別の契約アカウント**」（`docomo-vehicle-001`）を指す単位で運用する。台数課金型プロバイダー以外では、車両1台につきプロバイダー契約1件・Secrets Managerシークレット1件が対応することになる
 -   **車両 ⇔ プロバイダーのマッピング**：DynamoDBの車両認証テーブル（`vehicle_credentials`）の各アイテムに`provider_id`属性を持たせる。新規テーブルは不要（実装済み、`internal/auth`）
 -   **プロバイダー接続情報**：プロバイダーIDごとに1つのSecrets
     Managerシークレット（`rtk-relay/providers/<provider_id>`）として格納する。中継サーバのIAMロールは、このプレフィックス配下への`GetSecretValue`のみをワイルドカードで許可されている。**新しいプロバイダーの追加はシークレットを1個作るだけで完結し、Terraformの変更もコードの変更も不要**（実装済み、`internal/providerconfig.SecretsManagerResolver`）
@@ -96,7 +96,7 @@ Client実装（車載側）がBasic認証に標準対応しており、車載チ
 
 #### プロバイダー設定スキーマ
 
-各社RTKプロバイダーはID/Passwordだけでなく、[rtk_provider_comparison.md](./rtk_provider_comparison.md)の調査で分かった通り、NTRIPバージョンや暗号化ポートの有無など接続時の付随パラメータが異なる。これを吸収するため、プロバイダー設定（Secrets
+各社RTKプロバイダーはID/Passwordだけでなく、[RTKプロバイダー比較検討資料（Draft）.md](./RTKプロバイダー比較検討資料（Draft）.md)の調査で分かった通り、NTRIPバージョンや暗号化ポートの有無など接続時の付随パラメータが異なる。これを吸収するため、プロバイダー設定（Secrets
 Managerの値）は以下のJSONスキーマとする（`internal/providerconfig.Provider`）。
 
 ``` json

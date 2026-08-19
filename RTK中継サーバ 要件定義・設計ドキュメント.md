@@ -6,7 +6,7 @@
 SoftBank / KDDI等、**未選定**）が提供するNTRIPサービスを利用する。
 
 当初はNTRIP
-Casterを自前構築する方針だったが、運用負荷を避けるためRTKプロバイダー利用方針に変更した（[rtk_ntrip_communication_summary.md](./rtk_ntrip_communication_summary.md)参照）。
+Casterを自前構築する方針だったが、運用負荷を避けるためRTKプロバイダー利用方針に変更した（[RTKサービス利用時の NTRIP 通信まとめ.md](./RTKサービス利用時の%20NTRIP%20通信まとめ.md)参照）。
 
 その上で、車両とRTKプロバイダーの間に**中継サーバ**を置く。単純に車両がプロバイダーへ直接接続する構成にしない理由は以下の通り。
 

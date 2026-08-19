@@ -1,6 +1,6 @@
 # rtk-relay (POC)
 
-[rtk_relay_protocol_design.md](../rtk_relay_protocol_design.md)
+[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)
 の実装。車両からのNTRIPセッションを受け、DynamoDBで認証した上でRTKプロバイダーへ中継する。
 
 ## 今どこで何が動いているか
@@ -8,7 +8,7 @@
 | プログラム | 役割 | 今の実体 | ローカルで起動する必要があるのは |
 |---|---|---|---|
 | `cmd/relay` | 車両からはサーバ役／プロバイダーへはクライアント役（二重ロール） | AWS ECS（`rtk-relay-poc`）で**常時稼働中** | コードを変更し、AWSへ再デプロイする前に手元で動作確認したいとき |
-| `cmd/mockprovider` | サーバ役（`net.Listen`で待ち受けるだけ）＝RTKプロバイダーの代役 | AWS ECS（`rtk-relay-mockprovider-poc`）で**常時稼働中**（プロバイダー未選定のための暫定。[rtk_provider_comparison.md](../rtk_provider_comparison.md)で決まったら`infra/terraform`の`deploy_mockprovider = false`で撤去する） | AWSに繋がずオフラインで素早く検証したいとき |
+| `cmd/mockprovider` | サーバ役（`net.Listen`で待ち受けるだけ）＝RTKプロバイダーの代役 | AWS ECS（`rtk-relay-mockprovider-poc`）で**常時稼働中**（プロバイダー未選定のための暫定。[RTKプロバイダー比較検討資料（Draft）.md](../RTKプロバイダー比較検討資料（Draft）.md)で決まったら`infra/terraform`の`deploy_mockprovider = false`で撤去する） | AWSに繋がずオフラインで素早く検証したいとき |
 | `cmd/vehiclesim` | クライアント役（自分から`net.Dial`で接続しにいく）＝車両の代役 | **常時稼働のサービスとしてはどこにもデプロイしていない**。手元やCIなど好きな場所で都度実行する検証ツール | 動作確認したいとき全般（`RELAY_ADDR`でローカル/AWSどちらのrelayにも向けられる） |
 
 **重要**：ローカルの`relay`/`mockprovider`を起動するかどうかは、AWS上で常時動いている`rtk-relay-poc`/`rtk-relay-mockprovider-poc`には一切影響しない。両者は同じコードから作られた別々のデプロイ先（自分のマシン上のプロセス
@@ -87,7 +87,7 @@ flowchart LR
 -   `VEHICLE_TABLE_NAME`/`PROVIDER_SECRET_PREFIX`が未設定ならローカル用の実装（静的マップ／環境変数、常に1プロバイダーのみ）にフォールバックする（[internal/auth/vehicle.go](internal/auth/vehicle.go)、[internal/providerconfig/config.go](internal/providerconfig/config.go)）
 -   RTCM/GGAの中身はrelayが解釈せずそのまま中継する（[internal/relay/session.go](internal/relay/session.go)）
 -   AWSモードでは、車両ごとにDynamoDBの`provider_id`からプロバイダーを解決する（**セッションを張るたびに**Secrets Managerを引く。起動時に1回だけ読む方式ではない）ため、プロバイダーの追加・変更に中継サーバの再デプロイは不要（車両の`provider_id`を更新し、対応するシークレットを作る/更新するだけでよい）
--   プロバイダー設定はhost/port/mountpoint/ID/PWだけでなく、NTRIPバージョンや追加ヘッダーなど各社固有のパラメータも保持できる（詳細は[rtk_relay_protocol_design.md](../rtk_relay_protocol_design.md)の「プロバイダー設定スキーマ」）
+-   プロバイダー設定はhost/port/mountpoint/ID/PWだけでなく、NTRIPバージョンや追加ヘッダーなど各社固有のパラメータも保持できる（詳細は[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」）
 
 ## コマンド
 
@@ -144,7 +144,7 @@ aws dynamodb put-item \
   --profile fpv-japan --region ap-northeast-1
 ```
 
-プロバイダーの追加・更新は、`<provider_id>`ごとに1つのSecrets Managerシークレットを作るだけでよい（Terraformの変更・中継サーバの再デプロイは不要。フィールドの意味は[rtk_relay_protocol_design.md](../rtk_relay_protocol_design.md)の「プロバイダー設定スキーマ」参照）。
+プロバイダーの追加・更新は、`<provider_id>`ごとに1つのSecrets Managerシークレットを作るだけでよい（Terraformの変更・中継サーバの再デプロイは不要。フィールドの意味は[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」参照）。
 
 ``` bash
 # 新規プロバイダー
