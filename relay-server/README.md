@@ -108,13 +108,13 @@ docker compose run --rm vehiclesim
 
 ## 設定（環境変数）
 
-  変数                      説明
-  ------------------------- --------------------------------------------------------------------
-  `LISTEN_ADDR`             relayの待受アドレス（例: `:2101`）
-  `PROVIDER_SECRET_PREFIX`  設定時、車両ごとの`provider_id`から`<prefix><provider_id>`という名前のSecrets Managerシークレットを都度解決する（本番/AWS向け）
-  `PROVIDER_HOST/PORT/MOUNTPOINT/USERNAME/PASSWORD`   `PROVIDER_SECRET_PREFIX`未設定時、これらの環境変数から直接読む（ローカル向け、常に1プロバイダー固定・`provider_id`は無視される）
-  `VEHICLE_TABLE_NAME`      設定時、DynamoDBで車両認証を行う（本番/AWS向け）。各アイテムは`api_key_hash`に加えて`provider_id`が必須
-  `VEHICLE_API_KEYS`        `VEHICLE_TABLE_NAME`未設定時、`vehicleID:apiKey:providerID,...`形式で直接指定（ローカル向け。`providerID`は`PROVIDER_HOST`等のローカル固定プロバイダーでは実際には使われない）
+| 変数 | 説明 |
+|---|---|
+| `LISTEN_ADDR` | relayの待受アドレス（例: `:2101`） |
+| `PROVIDER_SECRET_PREFIX` | 設定時、車両ごとの`provider_id`から`<prefix><provider_id>`という名前のSecrets Managerシークレットを都度解決する（本番/AWS向け） |
+| `PROVIDER_HOST/PORT/MOUNTPOINT/USERNAME/PASSWORD` | `PROVIDER_SECRET_PREFIX`未設定時、これらの環境変数から直接読む（ローカル向け、常に1プロバイダー固定・`provider_id`は無視される） |
+| `VEHICLE_TABLE_NAME` | 設定時、DynamoDBで車両認証を行う（本番/AWS向け）。各アイテムは`api_key_hash`に加えて`provider_id`が必須 |
+| `VEHICLE_API_KEYS` | `VEHICLE_TABLE_NAME`未設定時、`vehicleID:apiKey:providerID,...`形式で直接指定（ローカル向け。`providerID`は`PROVIDER_HOST`等のローカル固定プロバイダーでは実際には使われない） |
 
 ## AWSへのデプロイ
 
