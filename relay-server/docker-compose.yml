@@ -1,0 +1,44 @@
+services:
+  mockprovider:
+    build:
+      context: .
+      args:
+        CMD: mockprovider
+    environment:
+      LISTEN_ADDR: ":2201"
+      MOCK_PROVIDER_MOUNTPOINT: "TESTMOUNT"
+      MOCK_PROVIDER_USERNAME: "relay"
+      MOCK_PROVIDER_PASSWORD: "relay-secret"
+    ports:
+      - "2201:2201"
+
+  relay:
+    build:
+      context: .
+      args:
+        CMD: relay
+    environment:
+      LISTEN_ADDR: ":2101"
+      PROVIDER_HOST: "mockprovider"
+      PROVIDER_PORT: "2201"
+      PROVIDER_MOUNTPOINT: "TESTMOUNT"
+      PROVIDER_USERNAME: "relay"
+      PROVIDER_PASSWORD: "relay-secret"
+      VEHICLE_API_KEYS: "vehicle-001:dev-key-001"
+    ports:
+      - "2101:2101"
+    depends_on:
+      - mockprovider
+
+  vehiclesim:
+    build:
+      context: .
+      args:
+        CMD: vehiclesim
+    environment:
+      RELAY_ADDR: "relay:2101"
+      VEHICLE_ID: "vehicle-001"
+      VEHICLE_API_KEY: "dev-key-001"
+      MOUNTPOINT: "RELAY"
+    depends_on:
+      - relay
