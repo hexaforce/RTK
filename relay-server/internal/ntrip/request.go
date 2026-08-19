@@ -103,7 +103,7 @@ func WriteRequestWithOptions(w *bufio.Writer, mountpoint, username, password str
 	if opts.Version != "1" {
 		b.WriteString("Ntrip-Version: Ntrip/2.0\r\n")
 	}
-	b.WriteString("User-Agent: NTRIP fpv-japan-relay/0.1\r\n")
+	b.WriteString("User-Agent: NTRIP rtk-micros-dev-relay/0.1\r\n")
 	fmt.Fprintf(&b, "Authorization: Basic %s\r\n", auth)
 	for k, v := range opts.ExtraHeaders {
 		fmt.Fprintf(&b, "%s: %s\r\n", k, v)

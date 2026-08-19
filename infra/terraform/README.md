@@ -11,7 +11,7 @@ IPを直接割り当てている（POC構成であり、本番では専用VPC・
 flowchart LR
     VEHICLE["車両<br/>(NTRIP Client)"]
     PROVIDER["RTK Provider<br/>(未選定)"]
-    VD["Value-Domain<br/>fpv.jp<br/>(手動CNAME)"]
+    VD["Value-Domain<br/>rtk.micros.dev<br/>(手動CNAME)"]
 
     subgraph AWS["AWS (ap-northeast-1, account 112401921913)"]
         direction LR
@@ -40,7 +40,7 @@ flowchart LR
 
 ## 前提
 
--   `~/.aws/credentials`に`fpv-japan`プロファイルが設定済みであること
+-   `~/.aws/credentials`に`rtk-micros-dev`プロファイルが設定済みであること
 -   このプロファイルのIAMユーザーにECS/ECR/EC2(VPC)/IAM/DynamoDB/SecretsManager/ELBの権限が付与されていること
 
 ## 使い方
@@ -59,9 +59,9 @@ terraform apply
 -   `nlb_dns_name` — 車両からの接続先（DNS設定の対象）
 -   `vehicle_credentials_table_name` / `provider_credentials_secret_arn` — 認証情報投入先
 
-## DNS（Value-Domain, fpv.jp）
+## DNS（Value-Domain, rtk.micros.dev）
 
-TerraformはRoute53を使わず、AWS側は`nlb_dns_name`を出力するのみ。Value-Domainのコントロールパネルで、`var.relay_subdomain`（デフォルト`rtk.fpv.jp`）に対して以下のCNAMEを手動で追加する。AレコードではなくCNAMEにすること（NLBのIPは固定ではなく変わり得るため）。
+TerraformはRoute53を使わず、AWS側は`nlb_dns_name`を出力するのみ。Value-Domainのコントロールパネルで、`var.relay_subdomain`（デフォルト`rtk.rtk.micros.dev`）に対して以下のCNAMEを手動で追加する。AレコードではなくCNAMEにすること（NLBのIPは固定ではなく変わり得るため）。
 
     種別:  CNAME
     ホスト: rtk

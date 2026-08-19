@@ -11,9 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
-	"github.com/fpv-japan/rtk-relay/internal/auth"
-	"github.com/fpv-japan/rtk-relay/internal/providerconfig"
-	"github.com/fpv-japan/rtk-relay/internal/relay"
+	"github.com/rtk-micros-dev/rtk-relay/internal/auth"
+	"github.com/rtk-micros-dev/rtk-relay/internal/providerconfig"
+	"github.com/rtk-micros-dev/rtk-relay/internal/relay"
 )
 
 func main() {

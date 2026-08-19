@@ -1,4 +1,4 @@
-module github.com/fpv-japan/rtk-relay
+module github.com/rtk-micros-dev/rtk-relay
 
 go 1.26.5
 

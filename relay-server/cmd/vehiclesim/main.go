@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fpv-japan/rtk-relay/internal/ntrip"
+	"github.com/rtk-micros-dev/rtk-relay/internal/ntrip"
 )
 
 func main() {

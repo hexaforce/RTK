@@ -17,9 +17,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/fpv-japan/rtk-relay/internal/auth"
-	"github.com/fpv-japan/rtk-relay/internal/ntrip"
-	"github.com/fpv-japan/rtk-relay/internal/providerconfig"
+	"github.com/rtk-micros-dev/rtk-relay/internal/auth"
+	"github.com/rtk-micros-dev/rtk-relay/internal/ntrip"
+	"github.com/rtk-micros-dev/rtk-relay/internal/providerconfig"
 )
 
 // Server accepts vehicle NTRIP connections and relays each one to the

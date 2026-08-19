@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "aws_profile" {
   description = "AWS CLI profile (see ~/.aws/credentials) used by Terraform."
   type        = string
-  default     = "fpv-japan"
+  default     = "rtk-micros-dev"
 }
 
 variable "environment" {
@@ -55,7 +55,7 @@ variable "relay_memory" {
 variable "data_bucket_name" {
   description = "Existing S3 bucket for collected measurement data (created outside Terraform)."
   type        = string
-  default     = "fpv-japan"
+  default     = "rtk-micros-dev"
 }
 
 variable "deploy_mockprovider" {
@@ -114,7 +114,7 @@ variable "provider_secret_prefix" {
 }
 
 variable "relay_subdomain" {
-  description = "Subdomain (under fpv.jp, managed at Value-Domain) that will CNAME to the relay's NLB. Not created by Terraform - see outputs.nlb_dns_name for the manual DNS step."
+  description = "Subdomain (under rtk.micros.dev, managed at Value-Domain) that will CNAME to the relay's NLB. Not created by Terraform - see outputs.nlb_dns_name for the manual DNS step."
   type        = string
-  default     = "rtk.fpv.jp"
+  default     = "rtk.rtk.micros.dev"
 }

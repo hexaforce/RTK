@@ -10,7 +10,7 @@
 # Create a provider's secret with:
 #   aws secretsmanager create-secret --name "${var.provider_secret_prefix}<provider_id>" \
 #     --secret-string '{"host":"...","port":"2101","mountpoint":"...","username":"...","password":"..."}' \
-#     --profile fpv-japan --region ap-northeast-1
+#     --profile rtk-micros-dev --region ap-northeast-1
 
 data "aws_caller_identity" "current" {}
 
