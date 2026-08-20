@@ -39,7 +39,7 @@ flowchart LR
 -   `terraform.tfstate`はリソースの実体を反映するが、Secrets Managerの中身（プロバイダー認証情報）はTerraformの管理外（[relay-server/README.md](../../relay-server/README.md)参照）
 
 ### ECS/Fargate
-![ECS/Fargate](../../ECR.png)
+![ECS/Fargate](./ECR.png)
 
 ## 前提
 

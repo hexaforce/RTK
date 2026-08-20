@@ -91,7 +91,7 @@ flowchart LR
 ### DynamoDB（`vehicle_credentials`テーブル）
 
 車両1台につき1アイテム。属性は3つだけ。
-![alt text](../DynamoDB.png)
+![alt text](./DynamoDB.png)
 | 属性 | 説明 |
 |---|---|
 | `vehicle_id`（パーティションキー） | 車両を一意に識別するID |
@@ -103,7 +103,7 @@ flowchart LR
 ### Secrets Manager（`rtk-relay/providers/<provider_id>`）
 
 **1アカウント = 1シークレット**が原則。多くのRTKプロバイダーは「1アカウント=同時接続1台まで」という契約になっているため（[RTKプロバイダー比較検討資料（Draft）.md](../RTK中継/RTKプロバイダー比較検討資料（Draft）.md)の「車両台数が多い場合のコスト構造」参照）、`provider_id`は会社名（`docomo`）ではなくアカウント単位（`docomo-vehicle-001`）で割り当て、車両が増えればシークレットも同じ数だけ増えていく想定。
-![alt text](<../Secrets Manager.png>)
+![alt text](./Secrets Manager.png)
 シークレットの値は以下のJSON（詳細は[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継/RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」）。
 
 ``` json
@@ -145,7 +145,7 @@ RELAY_ADDR=rtk.fpv.jp:2101 VEHICLE_ID=vehicle-001 VEHICLE_API_KEY=dev-key-001 MO
 
 `session established with relay`のあと`received RTCM bytes`が継続的に出れば、AWS上のrelay/mockprovider共々正常に動作している。  
 
-![alt text](../vehiclesim.png)
+![alt text](./vehiclesim.png)
 ## 設定（環境変数）
 
 | 変数 | 説明 |
