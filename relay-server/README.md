@@ -92,13 +92,13 @@ flowchart LR
 
 車両1台につき1アイテム。属性は3つだけ。
 ![alt text](./DynamoDB.png)
-| 属性 | 説明 |
-|---|---|
-| `vehicle_id`（パーティションキー） | 車両を一意に識別するID |
-| `api_key_hash` | 車両がNTRIP Basic認証で提示するAPIキーのSHA-256 hex（平文は保存しない） |
-| `provider_id` | この車両が使うプロバイダーのアカウントを指す値。Secrets Managerの`rtk-relay/providers/<provider_id>`に対応する |
+| 属性 | 説明 | 管轄 |
+|---|---|---|
+| `vehicle_id`（パーティションキー） | 車両を一意に識別するID | [認証機能](../認証機能/認証機能%20要件定義・設計ドキュメント.md)（共通） |
+| `api_key_hash` | 車両がNTRIP Basic認証で提示するAPIキーのSHA-256 hex（平文は保存しない） | [認証機能](../認証機能/認証機能%20要件定義・設計ドキュメント.md)（共通） |
+| `provider_id` | この車両が使うプロバイダーのアカウントを指す値。Secrets Managerの`rtk-relay/providers/<provider_id>`に対応する | RTK中継固有 |
 
-新規テーブルを増やすのではなく、この`provider_id`属性だけで「どの車両がどのプロバイダーアカウントを使うか」を表現している（実装は[internal/auth/vehicle.go](internal/auth/vehicle.go)）。
+`vehicle_id`/`api_key_hash`は計測データ収集・路面値マップ配信でも共通利用する想定の認証機能側の属性、`provider_id`はRTK中継が同じテーブルに追加したドメイン固有の拡張属性（新規テーブルは増やしていない）。実装は[internal/auth/vehicle.go](internal/auth/vehicle.go)。
 
 ### Secrets Manager（`rtk-relay/providers/<provider_id>`）
 
