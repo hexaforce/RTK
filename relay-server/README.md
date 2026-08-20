@@ -45,7 +45,7 @@ flowchart LR
 
 同じECRリポジトリ（`rtk-relay`）から、タグ違いのイメージを2つのECSサービスとしてそれぞれ動かしている。`relay`はNLB経由でインターネットから`rtk.fpv.jp:2101`で到達可能だが、`mockprovider`は`relay_task`のセキュリティグループからしか到達できず、インターネットには非公開。
 
-`relay`が実際にどちらへ中継するかは、接続してきた車両の`provider_id`（DynamoDB）で決まる（[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継/RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」参照）。`mock`ならこのVPC内の`mockprovider`へ、実プロバイダーのアカウントIDならSecrets Managerに登録したhost/port/mountpointをもとにインターネット経由で実プロバイダーへ接続する。`relay_task`は`assign_public_ip = true`でデフォルトVPCの各サブネットに配置されているため、インターネットへの直接アウトバウンド通信が可能（[infra/terraform/README.md](../infra/terraform/README.md)参照）。
+`relay`が実際にどちらへ中継するかは、接続してきた車両の`provider_id`（DynamoDB）で決まる（[認証機能 要件定義・設計ドキュメント.md](../認証機能/認証機能%20要件定義・設計ドキュメント.md)の「プロバイダー設定スキーマ」参照）。`mock`ならこのVPC内の`mockprovider`へ、実プロバイダーのアカウントIDならSecrets Managerに登録したhost/port/mountpointをもとにインターネット経由で実プロバイダーへ接続する。`relay_task`は`assign_public_ip = true`でデフォルトVPCの各サブネットに配置されているため、インターネットへの直接アウトバウンド通信が可能（[infra/terraform/README.md](../infra/terraform/README.md)参照）。
 
 > `mockprovider`タスクを再作成するとVPC内プライベートIPが変わる（Fargateの仕様上、固定できない）。Secrets
 > Managerの`rtk-relay/providers/mock`に古いIPを設定したままだと`relay`が`no route to host`で502を返すので、`mockprovider`を再デプロイしたら[アドレスを取り直してSecretsを更新](#awsへのデプロイ)する必要がある（恒久対応するならService
@@ -82,7 +82,7 @@ flowchart LR
 -   `VEHICLE_TABLE_NAME`/`PROVIDER_SECRET_PREFIX`が未設定ならローカル用の実装（静的マップ／環境変数、常に1プロバイダーのみ）にフォールバックする（[internal/auth/vehicle.go](internal/auth/vehicle.go)、[internal/providerconfig/config.go](internal/providerconfig/config.go)）
 -   RTCM/GGAの中身はrelayが解釈せずそのまま中継する（[internal/relay/session.go](internal/relay/session.go)）
 -   AWSモードでは、車両ごとにDynamoDBの`provider_id`からプロバイダーを解決する（**セッションを張るたびに**Secrets Managerを引く。起動時に1回だけ読む方式ではない）ため、プロバイダーの追加・変更に中継サーバの再デプロイは不要（車両の`provider_id`を更新し、対応するシークレットを作る/更新するだけでよい）
--   プロバイダー設定はhost/port/mountpoint/ID/PWだけでなく、NTRIPバージョンや追加ヘッダーなど各社固有のパラメータも保持できる（詳細は[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継/RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」）
+-   プロバイダー設定はhost/port/mountpoint/ID/PWだけでなく、NTRIPバージョンや追加ヘッダーなど各社固有のパラメータも保持できる（詳細は[認証機能 要件定義・設計ドキュメント.md](../認証機能/認証機能%20要件定義・設計ドキュメント.md)の「プロバイダー設定スキーマ」）
 
 ## DynamoDBとSecrets Manager
 
@@ -104,7 +104,7 @@ flowchart LR
 
 **1アカウント = 1シークレット**が原則。多くのRTKプロバイダーは「1アカウント=同時接続1台まで」という契約になっているため（[RTKプロバイダー比較検討資料（Draft）.md](../RTK中継/RTKプロバイダー比較検討資料（Draft）.md)の「車両台数が多い場合のコスト構造」参照）、`provider_id`は会社名（`docomo`）ではなくアカウント単位（`docomo-vehicle-001`）で割り当て、車両が増えればシークレットも同じ数だけ増えていく想定。
 ![alt text](./Secrets Manager.png)
-シークレットの値は以下のJSON（詳細は[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継/RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」）。
+シークレットの値は以下のJSON（詳細は[認証機能 要件定義・設計ドキュメント.md](../認証機能/認証機能%20要件定義・設計ドキュメント.md)の「プロバイダー設定スキーマ」）。
 
 ``` json
 {
@@ -184,7 +184,7 @@ aws dynamodb put-item \
   --profile fpv-japan --region ap-northeast-1
 ```
 
-プロバイダーの追加・更新は、`<provider_id>`ごとに1つのSecrets Managerシークレットを作るだけでよい（Terraformの変更・中継サーバの再デプロイは不要。フィールドの意味は[RTK中継サーバ プロトコル・認証方式 詳細設計.md](../RTK中継/RTK中継サーバ%20プロトコル・認証方式%20詳細設計.md)の「プロバイダー設定スキーマ」参照）。
+プロバイダーの追加・更新は、`<provider_id>`ごとに1つのSecrets Managerシークレットを作るだけでよい（Terraformの変更・中継サーバの再デプロイは不要。フィールドの意味は[認証機能 要件定義・設計ドキュメント.md](../認証機能/認証機能%20要件定義・設計ドキュメント.md)の「プロバイダー設定スキーマ」参照）。
 
 ``` bash
 # 新規プロバイダー
